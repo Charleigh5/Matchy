@@ -1,0 +1,7 @@
+{
+  "name": "CogniPlay AI Game",
+  "description": "An interactive AI-powered learning game for toddlers. Parents upload images of family and objects, and a friendly AI voice guides the child through a fun matching game to help them connect sounds, words, and pictures.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
