@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ImageCollection, GameStatus, ImageRecord, TranscriptionEntry } from '../types';
+import { ImageCollection, GameStatus, ImageRecord } from '../types';
 import { ImageCard } from './ImageCard';
 import { MicrophoneIcon, StopIcon, CheckCircleIcon, XCircleIcon, MicrophoneOffIcon } from './IconComponents';
 import { GoogleGenAI, LiveSession, LiveServerMessage, Blob, Modality } from '@google/genai';
@@ -36,15 +36,16 @@ interface GameScreenProps {
   onEndGame: () => void;
   gameStatus: GameStatus;
   setGameStatus: (status: GameStatus) => void;
+  selectedVoiceName: string | null;
 }
 
-export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, gameStatus, setGameStatus }) => {
+export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, gameStatus, setGameStatus, selectedVoiceName }) => {
   const [roundOptions, setRoundOptions] = useState<ImageRecord[]>([]);
   const [correctAnswer, setCorrectAnswer] = useState<ImageRecord | null>(null);
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [transcriptions, setTranscriptions] = useState<TranscriptionEntry[]>([]);
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'error' | 'closed' | 'permission_denied'>('connecting');
+  const [activeVoice, setActiveVoice] = useState<SpeechSynthesisVoice | null>(null);
 
   const sessionPromiseRef = useRef<Promise<LiveSession> | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -53,19 +54,102 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
   const currentTranscriptionRef = useRef('');
   const gameLoopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    const setVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) return; // Voices not loaded yet
+
+        let voiceToSet: SpeechSynthesisVoice | null = null;
+        if (selectedVoiceName) {
+            voiceToSet = voices.find(v => v.name === selectedVoiceName) || null;
+        }
+
+        // Fallback to a high-quality default if the selected voice is not found or none is selected.
+        if (!voiceToSet) {
+             const preferredVoices = [
+                (v: SpeechSynthesisVoice) => v.name === 'Google UK English Female',
+                (v: SpeechSynthesisVoice) => v.name === 'Samantha',
+                (v: SpeechSynthesisVoice) => v.lang === 'en-US' && v.name.includes('Google'),
+                (v: SpeechSynthesisVoice) => v.lang.startsWith('en-') && v.localService,
+                (v: SpeechSynthesisVoice) => v.lang.startsWith('en-'),
+            ];
+            for (const condition of preferredVoices) {
+                const foundVoice = voices.find(condition);
+                if (foundVoice) {
+                    voiceToSet = foundVoice;
+                    break;
+                }
+            }
+        }
+        setActiveVoice(voiceToSet);
+    };
+
+    window.speechSynthesis.onvoiceschanged = setVoice;
+    setVoice(); // Initial attempt
+
+    return () => {
+        window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, [selectedVoiceName]);
+
   const speak = useCallback((text: string) => {
     return new Promise<void>((resolve) => {
+      window.speechSynthesis.cancel(); // Stop any previously speaking utterances
       const utterance = new SpeechSynthesisUtterance(text);
+      if (activeVoice) {
+          utterance.voice = activeVoice;
+      }
+      // Add a bit of natural variation to the voice to make it more memorable and character-like.
+      utterance.pitch = 1.2 + (Math.random() - 0.5) * 0.2; // Varies between 1.1 and 1.3
+      utterance.rate = 0.9 + (Math.random() - 0.5) * 0.1;  // Varies between 0.85 and 0.95
+      utterance.volume = 1;  // Use maximum volume.
+      
       utterance.onend = () => resolve();
+      // Ensure the game doesn't hang if there's a speech error.
+      utterance.onerror = () => resolve(); 
       window.speechSynthesis.speak(utterance);
     });
-  }, []);
+  }, [activeVoice]);
+  
+  const startNewRound = useCallback(() => {
+    setFeedback(null);
+    setIsProcessing(false);
+
+    if (collection.images.length < 2) {
+      // Not enough images to play
+      onEndGame();
+      return;
+    }
+
+    // Pick a random correct answer
+    const newCorrectAnswer = collection.images[Math.floor(Math.random() * collection.images.length)];
+    setCorrectAnswer(newCorrectAnswer);
+
+    // Get other options, ensuring no duplicates
+    const otherOptions = collection.images.filter(img => img.id !== newCorrectAnswer.id);
+    
+    // Determine number of options based on complexity
+    // Complexity 1-2: 2 options. 3-4: 3 options. 5: 4 options.
+    const numOptions = Math.min(Math.max(2, Math.ceil(collection.complexity / 1.5)), 4);
+    
+    const roundImages = [newCorrectAnswer];
+    // Shuffle other options and pick the required number
+    otherOptions.sort(() => 0.5 - Math.random());
+    roundImages.push(...otherOptions.slice(0, numOptions - 1));
+
+    // Shuffle the final round options
+    roundImages.sort(() => 0.5 - Math.random());
+    setRoundOptions(roundImages);
+
+    // Ask the question
+    speak(`Find the ${newCorrectAnswer.names[0]}`);
+
+  }, [collection.images, collection.complexity, onEndGame, speak]);
 
   const processUserAnswer = useCallback((transcript: string) => {
     if (!correctAnswer || isProcessing) return;
 
     setIsProcessing(true);
-    setTranscriptions(prev => [...prev, { source: 'user', text: transcript, timestamp: Date.now() }]);
 
     const isCorrect = correctAnswer.names.some(name =>
       transcript.toLowerCase().includes(name.toLowerCase())
@@ -74,7 +158,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
     if (isCorrect) {
       setFeedback('correct');
       speak("That's right!").then(() => {
-        gameLoopTimeoutRef.current = setTimeout(() => startNewRound(), 1500);
+        gameLoopTimeoutRef.current = setTimeout(() => startNewRound(), 2000); // Increased delay to enjoy animation
       });
     } else {
       setFeedback('incorrect');
@@ -89,7 +173,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
         }, 1500);
       });
     }
-  }, [correctAnswer, isProcessing, speak]);
+  }, [correctAnswer, isProcessing, speak, startNewRound]);
 
 
   const setupGeminiLive = useCallback(async () => {
@@ -129,10 +213,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
           },
           onmessage: (message: LiveServerMessage) => {
             if (message.serverContent?.inputTranscription) {
-              const text = message.serverContent.inputTranscription.text;
-              currentTranscriptionRef.current += text;
-            }
-            if(message.serverContent?.turnComplete) {
+              currentTranscriptionRef.current += message.serverContent.inputTranscription.text;
+            } else if (message.serverContent?.turnComplete) {
               const finalTranscript = currentTranscriptionRef.current.trim();
               if (finalTranscript) {
                 processUserAnswer(finalTranscript);
@@ -141,7 +223,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
             }
           },
           onerror: (e: ErrorEvent) => {
-            console.error('Gemini Live Error:', e);
+            console.error('Gemini Live connection error:', e);
             setConnectionState('error');
           },
           onclose: (e: CloseEvent) => {
@@ -154,163 +236,99 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
         },
       });
       sessionPromiseRef.current = sessionPromise;
-    } catch (error) {
-        if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError')) {
-            console.error('Microphone permission denied by user.');
-            setConnectionState('permission_denied');
-        } else {
-            console.error('Failed to get microphone access:', error);
-            setConnectionState('error');
-        }
+
+    } catch (err) {
+      console.error("Failed to get microphone permissions or setup Gemini Live:", err);
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
+        setConnectionState('permission_denied');
+      } else {
+        setConnectionState('error');
+      }
     }
   }, [processUserAnswer, setGameStatus]);
-
-  const cleanup = useCallback(() => {
-    if (gameLoopTimeoutRef.current) clearTimeout(gameLoopTimeoutRef.current);
-    window.speechSynthesis.cancel();
-    
-    microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
-
-    if (scriptProcessorRef.current) {
-        scriptProcessorRef.current.disconnect();
-        scriptProcessorRef.current = null;
-    }
-    
-    inputAudioContextRef.current?.close().catch(console.error);
-    
-    sessionPromiseRef.current?.then(session => session.close()).catch(console.error);
-    sessionPromiseRef.current = null;
-
-  }, []);
-
-  const startNewRound = useCallback(() => {
-    setFeedback(null);
-    setIsProcessing(false);
-
-    let options = [...collection.images].sort(() => 0.5 - Math.random());
-    const numOptions = Math.min(collection.images.length, Math.max(2, collection.complexity + 1));
-    options = options.slice(0, numOptions);
-    
-    const newCorrectAnswer = options[Math.floor(Math.random() * options.length)];
-    
-    setCorrectAnswer(newCorrectAnswer);
-    setRoundOptions(options);
-
-    speak(`Can you find the ${newCorrectAnswer.names[0]}?`);
-  }, [collection, speak]);
-
-
-  useEffect(() => {
-    setupGeminiLive();
-    return () => cleanup();
-  }, [setupGeminiLive, cleanup]);
   
   useEffect(() => {
-    if(gameStatus === GameStatus.PLAYING) {
-       startNewRound();
+    if (gameStatus === GameStatus.LOADING) {
+      setupGeminiLive();
+    }
+
+    return () => {
+      // Cleanup on unmount
+      if (gameLoopTimeoutRef.current) clearTimeout(gameLoopTimeoutRef.current);
+      
+      sessionPromiseRef.current?.then(session => session.close());
+      
+      microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+      
+      if (scriptProcessorRef.current) {
+        scriptProcessorRef.current.disconnect();
+      }
+      if (inputAudioContextRef.current?.state !== 'closed') {
+        inputAudioContextRef.current?.close();
+      }
+      window.speechSynthesis.cancel();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (gameStatus === GameStatus.PLAYING) {
+      // Start the first round once connected and playing
+      startNewRound();
     }
   }, [gameStatus, startNewRound]);
 
-  const renderStatus = () => {
-    switch (gameStatus) {
-      case GameStatus.LOADING:
-        return <div className="text-center text-gray-500">Connecting to AI...</div>;
-      case GameStatus.PLAYING:
-        return (
-          <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-3xl mx-auto relative">
-            {roundOptions.map(image => (
-              <ImageCard
-                key={image.id}
-                imageUrl={image.url}
-                altText={image.names[0]}
-                onClick={() => {}} // Click is disabled, interaction is via voice
-                isDisabled={isProcessing}
-              />
-            ))}
-            {feedback === 'correct' && (
-              <div className="absolute inset-0 bg-green-500 bg-opacity-70 rounded-3xl flex items-center justify-center">
-                <CheckCircleIcon className="w-32 h-32 text-white" />
-              </div>
-            )}
-            {feedback === 'incorrect' && (
-              <div className="absolute inset-0 bg-red-500 bg-opacity-70 rounded-3xl flex items-center justify-center">
-                <XCircleIcon className="w-32 h-32 text-white" />
-              </div>
-            )}
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
-  if (connectionState === 'permission_denied') {
+  if (connectionState === 'connecting' || gameStatus === GameStatus.LOADING) {
     return (
-        <div className="flex flex-col items-center justify-center p-4 min-h-[80vh] text-center">
-            <MicrophoneOffIcon className="w-24 h-24 text-red-400 mb-6" />
-            <h2 className="text-3xl font-bold text-gray-700 mb-2">Microphone Access Needed</h2>
-            <p className="text-lg text-gray-500 max-w-md mx-auto mb-6">
-                This game needs your permission to use the microphone to hear answers.
-            </p>
-            <div className="bg-gray-100 p-4 rounded-lg text-left max-w-md w-full mb-6 shadow-sm">
-                <p className="font-semibold text-gray-800">How to fix:</p>
-                <ol className="list-decimal list-inside text-gray-600 mt-2 space-y-1">
-                    <li>Click the <strong>lock icon (🔒)</strong> in the address bar.</li>
-                    <li>Find the "Microphone" permission.</li>
-                    <li>Change the setting to <strong>"Allow"</strong>.</li>
-                    <li>Click the button below to try again.</li>
-                </ol>
-            </div>
-            <button
-                onClick={() => {
-                    setConnectionState('connecting');
-                    setupGeminiLive();
-                }}
-                className="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105"
-            >
-                Try Again
-            </button>
-             <button
-                onClick={onEndGame}
-                className="mt-4 px-6 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md"
-            >
-                Back to Dashboard
-            </button>
-        </div>
+      <div className="flex flex-col items-center justify-center h-screen bg-blue-50">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="mt-4 text-lg text-gray-600">Getting ready to play...</p>
+      </div>
     );
   }
 
-  return (
-    <div className="flex flex-col items-center justify-between p-4 min-h-[80vh]">
-      <div className="w-full text-center">
-        <h2 className="text-3xl font-bold text-gray-700 mb-2">{collection.name}</h2>
-        {gameStatus === GameStatus.PLAYING && !isProcessing && (
-          <p className="text-xl text-gray-500">Listen carefully and say what you see!</p>
-        )}
-      </div>
-      
-      <div className="flex-grow flex items-center justify-center w-full my-6">
-        {renderStatus()}
-      </div>
-
-      <div className="flex flex-col items-center space-y-4">
-        <div className="flex items-center space-x-3 text-gray-600">
-            <MicrophoneIcon className="w-8 h-8" isOn={!isProcessing && gameStatus === GameStatus.PLAYING && connectionState === 'connected'} />
-            <span className="text-lg">
-                {connectionState === 'connected' ? (isProcessing ? "Thinking..." : "Listening...") : "Connecting..."}
-            </span>
+  if (connectionState === 'permission_denied') {
+     return (
+        <div className="flex flex-col items-center justify-center h-screen bg-red-50 text-center p-4">
+            <MicrophoneOffIcon className="w-24 h-24 text-red-400 mb-4" />
+            <h2 className="text-2xl font-bold text-red-700">Microphone Access Needed</h2>
+            <p className="mt-2 text-red-600">This game needs permission to use your microphone to hear the answers.</p>
+            <p className="mt-1 text-gray-500">Please allow microphone access in your browser settings and refresh the page.</p>
+            <button onClick={onEndGame} className="mt-6 px-6 py-2 bg-red-500 text-white rounded-lg shadow hover:bg-red-600">Go Back</button>
         </div>
+     )
+  }
+
+  if (connectionState === 'error' || connectionState === 'closed') {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-100 text-center p-4">
+          <XCircleIcon className="w-24 h-24 text-gray-400 mb-4" />
+          <h2 className="text-2xl font-bold text-gray-700">Connection Issue</h2>
+          <p className="mt-2 text-gray-500">
+            {connectionState === 'error' ? "Something went wrong while connecting." : "The connection was closed."}
+          </p>
+          <button onClick={onEndGame} className="mt-6 px-6 py-2 bg-gray-500 text-white rounded-lg shadow hover:bg-gray-600">Back to Dashboard</button>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="flex flex-col h-screen bg-gray-100 font-sans p-4 sm:p-6 lg:p-8">
+      <header className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold text-gray-700">{collection.name}</h2>
         <button
-          onClick={() => {
-            cleanup();
-            onEndGame();
-          }}
-          className="flex items-center justify-center px-6 py-3 bg-red-500 text-white font-bold rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105"
+          onClick={onEndGame}
+          className="flex items-center justify-center px-4 py-2 bg-red-500 text-white rounded-lg shadow hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
         >
-          <StopIcon className="w-6 h-6 mr-2" />
+          <StopIcon className="w-5 h-5 mr-2" />
           End Game
         </button>
-      </div>
-    </div>
-  );
-};
+      </header>
+
+      <main className="flex-grow flex items-center justify-center">
+        <div className={`grid gap-4 sm:gap-6 md:gap-8 w-full max-w-4xl grid-cols-2`}>
+           {roundOptions.map(image => (
+            <ImageCard
+              key={image.id}
+              imageUrl={image.url}
+              

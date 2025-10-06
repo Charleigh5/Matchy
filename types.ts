@@ -18,9 +18,3 @@ export enum GameStatus {
   PLAYING = 'PLAYING',
   FINISHED = 'FINISHED',
 }
-
-export interface TranscriptionEntry {
-  source: 'user' | 'model';
-  text: string;
-  timestamp: number;
-}

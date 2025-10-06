@@ -10,8 +10,17 @@ const App: React.FC = () => {
   const [selectedCollection, setSelectedCollection] = useState<ImageCollection | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCollection, setEditingCollection] = useState<ImageCollection | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('cogniplay-voice') || null;
+    } catch (e) {
+      console.error("Could not read voice from localStorage", e);
+      return null;
+    }
+  });
 
-  // Mock data is now a fallback if nothing is in localStorage, using embedded base64 images
+
   const mockCollections: ImageCollection[] = useMemo(() => [
     {
       id: 'collection-1',
@@ -29,8 +38,8 @@ const App: React.FC = () => {
       name: 'Friendly Animal Faces',
       complexity: 1,
       images: [
-        { id: 'img-2a', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZENzAwIiBkPSJNNzguMSAyMi43Yy0uMi0zLjItMS4xLTUuNi0yLjYtNy4yLTIuOS0zLTcuMy0zLjQtMTEuNS0zLjRzLTguNi40LTExLjUgMy40Yy0xLjUgMS42LTIuNCA0LTIuNiA3LjJMMzYuOSA2NGMyMy41IDE3LjQgNDEuMiAxMy40IDQxLjIgMTMuNEw2MCAzNmw2LjkgMTMuNGMxLjkgMy43IDQuNyA2LjYgOCA3LjdsMTMuMyA1LjUgMTQtMy42YzAgMC00LjYgMTcuMS0yMiAxMy45TDc4LjEgMjIuN3oiLz48cGF0aCBmaWxsPSIjMkQyNzI4IiBkPSJNNjMuMyAzNS4xYzAgMS0uOSAxLjgtMiAxLjhzLTIgLjgtMi0xLjggMC0xLjguOS0xLjggMi0uOSAyIC45em0tMTcuMiAxLjhjLTEuMSAwLTIgLjgtMiAxLjhzLjkgMS44IDIgMS44IDItLjggMi0xLjgtLjktMS44LTItMS44eiIvPjxwYXRoIGQ9Ik01MS45IDQzLjNjLTEuMS0xLjctMi43LTIuOS00LjYtMy40LTMtLjgtNi4zLjItNy44IDMuMWwtOC42IDQuNGMtMi45IDMuNS40IDguNSA1IDcuOGwyMi4xLTMuNGMxLjktLjMgMy40LTEuNSA0LTMuNCAzLjUtNC43LTEuMy0xMC4yLTQuOC04LjFMNTEuOSA0My4zeiIgZmlsbD0iIzJEMjcyOCIvPjxwYXRoIGZpbGw9IiNGRkZGRkYiIGQ9Ik02My4zIDM1LjFjMC0xLjEgLjktMS45IDItMS45czIgLjggMiAxLjljMCAxLS45IDEuOC0yIDEuOHMtMi0uOC0yLTEuOHptLTE3LjIgMGMwLTEuMS45LTEuOSA1LTEuOXMyIC44IDIgMS45YzAgMS0uOSAxLjgtMiAxLjhTMzQuMyAzNi4xIDM0LjMgMzUuMXoiLz48cGF0aCBmaWxsPSIjRkZBN0E3IiBkPSJNNTEuMSA0Ny45Yy0xLjIgMC0yLjEtLjItMy0uNi0xLjItLjUtMi0xLjQtMi4xLTIuNmwtLjItMi44YzAtLjYuMy0xLjEuOC0xLjRsMi42LTEuNGMxLjQtLjcgMy4xLS40IDQuMSAxLjEgMSAxLjUgLjcgMy4zLS44IDQuMmwtLjYgLjVjLS42LjMtMS4yLjUtMS45LjZ6Ii8+PC9zdmc+', names: ['Cat', 'Kitty'] },
-        { id: 'img-2b', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjQ0Q4NzVGIiBkPSJNMzYuNiA0MS45QzE2LjUgNDUuOCAxMy4yIDgxLjkgMzEuOCA5Mi40YzE4LjYgMTAuNSA0NS45LjggNTEuNS0xOS4yUzgwLjkgMjguMSAzNi42IDQxLjl6Ii8+PHBhdGggZmlsbD0iI0ZGRkZGRiIgZD0iTTE2LjggMzguOGMtMTEuMyAxLjQtMTMuOCA4LjItMTAuOCAxNC4zQzkuMyA1OS4yIDI2LjcgNjQuNCAzNiA1Ny42IDQ1LjQgNTAuNyA0MS44IDM2LjggMTYuOCAzOC44em02My44LTEuMWMtMTEuMy0xLjktMTUuNSA0LjEtMTUgMTEuNCAzLjcgNi45IDIyLjEgNi4xIDMwLjUtMS4xIDguNC03LjItNC42LTE0LjctMTUuNS0xMC4zeiIvPjxwYXRoIGZpbGw9IiMyNzI4MjIiIGQ9Ik0zMC45IDcyLjljMCAuNy0uNSAxLjItMS4yIDEuMnMtMS4yLS41LTEuMi0xLjyAwLTEuMi41LTEuMiAxLjIuNSAxLjIgMS4yem0tNS42LTQuMmMwIC43LS41IDEuMi0xLjIgMS4ycy0xLjItLjUtMS4yLTEuMiAwLTEuMi41LTEuMiAxLjIgLjUgMS4yIDEuMnptNDIuMyAxLjdjMCAuNy0uNSAxLjItMS4yIDEuMnMtMS4yLS41LTEuMi0xLjcgMC0xLjIuNS0xLjIgMS4yLjUgMS4yIDEuMnptNS41LTMuOWMwIC43LS41IDEuMi0xLjIgMS4ycy0xLjItLjUtMS4yLTEuMiAwLTEuMi41LTEuMiAxLjIgLjUgMS4yIDEuMnoiLz48cGF0aCBkPSJNNjcuMyA1Ni4zYzEuMS0xLjYgMi43LTIuMyA0LjUtMi4zIDIuMSAwIDQuMS45IDUuNSAyLjggMS45IDIuNSAxLjkgNi44IDAgOS4zLTEuNCAxLjktMy40IDIuOC01LjUgMi44LTEuOCAwLTMuNC0uNy00LjUtMi4yLTEuNi0yLjQtMS42LTYuOCAwLTkuNHptLTM3LjYgMS43YzEuNC0xLjkgMy40LTIuOCA1LjUtMi44IDEuOCAwIDMuNC43IDQuNSAyLjIgMS42IDIuNSAxLjYgNi44IDAgOS40LTEuMSAxLjYtMi43IDIuMy00LjUgMi4zLTIuMSAwLTQuMS0uOS01LjUtMi44LTEuOS0yLjUtMS45LTYuOCAwLTkuM3oiIGZpbGw9IiNGRkZGRkYiLz48cGF0aCBmaWxsPSIjMjcyODIyIiBkPSJNNjUgNTcuNmMuOC0xLjIgMi0xLjggMy4zLTEuOCAxLjUgMCAyLjkuNyAzLjkgMiAxLjMgMS43IDEuMyA0LjggMCA2LjUtMSAxLjMtMi40IDItMy45IDItMS4zIDAtMi41LS42LTMuMy0xLjgtMS4xLTEuNy0xLjEtNC43IDAtNi45em0tMzcuNyAxLjNjMS0xLjMgMi40LTIgMy45LTJzMi45LjcgMy45IDIgMS4zIDQuOCAwIDYuNWMtMSAxLjMtMi40IDItMy45IDItMS41IDAtMi45LS43LTMuOS0yLTEuMy0xLjctMS4zLTQuOCAwLTYuNXoiLz48cGF0aCBmaWxsPSIjMjcyODIyIiBkPSJNNTQuMSA4MS4xYy0xLjIgMC0yLjQuOC0yLjQgMS45IDAgMS42IDEuNiAyLjIgMy41IDIuMiAxLjkgMCAzLjUtLjYgMy41LTIuMiAwLTEuMS0xLjItMS45LTIuNC0xLjktMi4yIDAtMi4yIDAgMi4yIDBjMS4yIDAgMi40LS44IDIuNC0xLjkgMC0xLjYtMS42LTIuMi0zLjUtMi4yLTEuOSAwLTMuNS42LTMuNSA3LjIgMCAxLjEuMSAxLjktMi40IDEuOXMtMi40LS44LTIuNC0xLjljMC0xLjYtMS42LTIuMi0zLjUtMi4yLTEuOSAwLTMuNS42LTMuNSA1LjIgMCAxLjEuMSAxLjktMi40IDEuOXMtMi40LS44LTIuNC0xLjljMC0xLjYtMS42LTIuMi0zLjUtMi4yLTEuOSAwLTMuNS42LTMuNSAyLjIgMCAxLjEuMSAxLjktMi40IDEuOXMtMi40LS44LTIuNC0xLjljMC00LjQtNi40LTUuMi03LjgtMy4zLTEuMyAxLjcgMS40IDQuMyA1LjUgNC4zaDIxLjJjNC4xIDAgNi44LTIuNiA1LjUtNC4zLTEuMy0xLjgtNi4xLTIuNS03LjgtMy40LTEuMi0uNi0yLjMtMS40LTIuMy0yLjggMC0xLjYgMS42LTIuMiAzLjUtMi4yIDEuOSAwIDMuNS42IDMuNSAyLjIgMCAxLjEuMSAxLjktMi40IDEuOXMtMi40LS44LTIuNC0xLjljMC0xLjYtMS42LTIuMi0zLjUtMi4yLTEuOSAwLTMuNS42LTMuNSAyLjIgMCAuNy4zIDEuMy43IDEuN3oiLz48L3N2Zz4=', names: ['Dog', 'Puppy'] },
+        { id: 'img-2a', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZENzAwIiBkPSJNNzguMSAyMi43Yy0uMi0zLjItMS4xLTUuNi0yLjYtNy4yLTIuOS0zLTcuMy0zLjQtMTEuNS0zLjRzLTguNi40LTExLjUgMy40Yy0xLjUgMS42LTIuNCA0LTIuNiA3LjJMMzYuOSA2NGMyMy41IDE3LjQgNDEuMiAxMy40IDQxLjIgMTMuNEw2MCAzNmw2LjkgMTMuNGMxLjkgMy43IDQuNyA2LjYgOCA3LjdsMTMuMyA1LjUgMTQtMy42YzAgMC00LjYgMTcuMS0yMiAxMy45TDc4LjEgMjIuN3oiLz48cGF0aCBmaWxsPSIjMkQyNzI4IiBkPSJNNjMuMyAzNS4xYzAgMS0uOSAxLjgtMiAxLjhzLTIgLjgtMi0xLjggMC0xLjguOS0xLjggMi0uOSAyIC45em0tMTcuMiAxLjhjLTEuMSAwLTIgLjgtMiAxLjhzLjkgMS44IDIgMS44IDItLjggMi0xLjgtLjktMS44LTItMS44eiIvPjxwYXRoIGQ9Ik01MS45IDQzLjNjLTEuMS0xLjctMi43LTIuOS00LjYtMy40LTMtLjgtNi4zLjItNy44IDMuMWwtOC42IDQuNGMtMi49IDMuNS40IDguNSA1IDcuOGwyMi4xLTMuNGMxLjktLjMgMy40LTEuNSA0LTMuNCAzLjUtNC43LTEuMy0xMC4yLTQuOC04LjFMNTEuOSA0My4zeiIgZmlsbD0iIzJEMjcyOCIvPjxwYXRoIGZpbGw9IiNGRkZGRkYiIGQ9Ik02My4zIDM1LjFjMC0xLjEgLjktMS45IDItMS45czIgLjggMiAxLjljMCAxLS45IDEuOC0yIDEuOHMtMi0uOC0yLTEuOHptLTE3LjIgMGMwLTEuMS45LTEuOSA1LTEuOXMyIC44IDIgMS45YzAgMS0uOSAxLjgtMiAxLjhTMzQuMyAzNi4xIDM0LjMgMzUuMXoiLz48cGF0aCBmaWxsPSIjRkZBN0E3IiBkPSJNNTEuMSA0Ny45Yy0xLjIgMC0yLjEtLjItMy0uNi0xLjJoLjUtMi0xLjQtMi4xLTIuNmwtLjItMi44YzAtLjYuMy0xLjEuOC0xLjRsMi42LTEuNGMxLjQtLjcgMy4xLS40IDQuMSAxLjEgMSAxLjUgLjcgMy4zLS44IDQuMmwtLjYgLjVjLS42LjMtMS4yLjUtMS45LjZ6Ii8+PC9zdmc+', names: ['Cat', 'Kitty'] },
+        { id: 'img-2b', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjQ0Q4NzVGIiBkPSJNMzYuNiA0MS45QzE2LjUgNDUuOCAxMy4yIDgxLjkgMzEuOCA5Mi40YzE4LjYgMTAuNSA0NS45LjggNTEuNS0xOS4yUzgwLjkgMjguMSAzNi42IDQxLjl6Ii8+PHBhdGggZmlsbD0iI0ZGRkZGRiIgZD0iTTE2LjggMzguOGMtMTEuMyAxLjQtMTMuOCA4LjItMTAuOCAxNC4zQzkuMyA1OS4yIDI2LjcgNjQuNCAzNiA1Ny42IDQ1LjQgNTAuNyA0MS44IDM2LjggMTYuOCAzOC44em02My44LTEuMWMtMTEuMy0xLjktMTUuNSA0LjEtMTUgMTEuNCAzLjcgNi45IDIyLjEgNi4xIDMwLjUtMS4xIDguNC03LjItNC42LTE0LjctMTUuNS0xMC4zeiIvPjxwYXRoIGZpbGw9IiMyNzI4MjIiIGQ9Ik0zMC45IDcyLjljMCAuNy0uNSAxLjItMS4yIDEuMnMtMS4yLS41LTEuMi0xLjjjyAwLTEuMi41LTEuMiAxLjIuNSAxLjIgMS4yem0tNS42LTQuMmMwIC43LS41IDEuMi0xLjIgMS4ycy0xLjItLjUtMS4yLTEuMiAwLTEuMi41LTEuMiAxLjIgLjUgMS4yIDEuMnptNDIuMyAxLjdjMCAuNy0uNSAxLjItMS4yIDEuMnMtMS4yLS41LTEuMi0xLjcgMC0xLjIuNS0xLjIgMS4yLjUgMS4yIDEuMnptNS41LTMuOWMwIC43LS41IDEuMi0xLjIgMS4ycy0xLjItLjUtMS4yLTEuMiAwLTEuMi41LTEuMiAxLjIgLjUgMS4yIDEuMnoiLz48cGF0aCBkPSJNNjcuMyA1Ni4zYzEuMS0xLjYgMi43LTIuMyA0LjUtMi4zIDIuMSAwIDQuMS45IDUuNSAyLjggMS45IDIuNSAxLjkgNi44IDAgOS4zLTEuNCAxLjktMy40IDIuOC01LjUgMi44LTEuOCAwLTMuNC0uNy00LjUtMi4yLTEuNi0yLjQtMS42LTYuOCAwLTkuNHptLTM3LjYgMS43YzEuNC0xLjkgMy40LTIuOCA1LjUtMi44IDEuOCAwIDMuNC43IDQuNSAyLjIgMS42IDIuNSAxLjYgNi44IDAgOS40LTEuMSAxLjYtMi43IDIuMy00LjUgMi4zLTIuMSAwLTQuMS0uOS01LjUtMi44LTEuOS0yLjUtMS45LTYuOCAwLTkuM3oiIGZpbGw9IiNGRkZGRkYiLz48cGF0aCBmaWxsPSIjMjcyODIyIiBkPSJNNjUgNTcuNmMuOC0xLjIgMi0xLjggMy4zLTEuOCAxLjUgMCAyLjkuNyAzLjkgMiAxLjMgMS43IDEuMyA0LjggMCA2LjUtMSAxLjMtMi40IDItMy45IDItMS4zIDAtMi41LS42LTMuMy0xLjgtMS4xLTEuNy0xLjEtNC43IDAtNi45em0tMzcuNyAxLjNjMS0xLjMgMi40LTIgMy45LTJzMi45LjcgMy45IDIgMS4zIDQuOCAwIDYuNWMtMSAxLjMtMi40IDItMy45IDItMS41IDAtMi45LS43LTMuOS0yLTEuMy0xLjctMS4zLTQuOCAwLTYuNXoiLz48cGF0aCBmaWxsPSIjMjcyODIyIiBkPSJNNTQuMSA4MS4xYy0xLjIgMC0yLjQuOC0yLjQgMS45IDAgMS42IDEuNiAyLjIgMy41IDIuMiAxLjkgMCAzLjUtLjYgMy41LTIuMiAwLTEuMS0xLjItMS45LTIuNC0xLjktMi4yIDAtMi4yIDAgMi4yIDBjMS4yIDAgMi40LS44IDIuNC0xLjkgMC0xLjYtMS42LTIuMi0zLjUtMi4yLTEuOSAwLTMuNS42LTMuNSA3LjIgMCAxLjEuMSAxLjktMi40IDEuOXMtMi40LS44LTIuNC0xLjljMC0xLjYtMS42LTIuMi0zLjUtMi4yLTEuOSAwLTMuNS42LTMuNSA1LjIgMCAxLjEuMSAxLjktMi40IDEuOXMtMi40LS44LTIuNC0xLjljMC0xLjYtMS42LTIuMi0zLjUtMi4yLTEuOSAwLTMuNS42LTMuNSAyLjIgMCAxLjEuMSAxLjktMi40IDEuOXMtMi40LS44LTIuNC0xLjljMC00LjQtNi40LTUuMi03LjgtMy4zLTEuMyAxLjcgMS40IDQuMyA1LjUgNC4zaDIxLjJjNC4xIDAgNi44LTIuNiA1LjUtNC4zLTEuMy0xLjgtNi4xLTIuNS03LjgtMy40LTEuMi0uNi0yLjMtMS40LTIuMy0yLjggMC0xLjYgMS42LTIuMiAzLjUtMi4yIDEuOSAwIDMuNS42IDMuNSAyLjIgMCAxLjEuMSAxLjktMi40IDEuOXMtMi40LS44LTIuNC0xLjljMC0xLjYtMS42LTIuMi0zLjUtMi4yLTEuOSAwLTMuNS42LTMuNSAyLjIgMCAuNy4zIDEuMy43IDEuN3oiLz48L3N2Zz4=', names: ['Dog', 'Puppy'] },
         { id: 'img-2c', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjOEQ1RTQwIiBkPSJNNTQuNiAyMi40QzQ1LjQgMTQuMSAzMi41IDE1LjYgMjIgMjMuOGMtOS4xIDcuMi03LjkgMjQuNSAxLjMgMzEuOCAxMy4zIDEwLjYgMzQuMiAyLjkgMzQuMi0xNC40IDAtMTEuOC04LjUtMTguOS04LjktMTguOHptLTEwLjkgNTMuN2MtMTUuOCAxLjktMzEuMy0xMS4yLTMzLjItMjctMS45LTE1L.ggOS45LTMwLjIgMjUuNy0zMi4xIDE1LjgtMS45IDMxLjMgMTEuMiAzMy4yIDI3IDEuOSA4LjgtLjcgMTcuNS02LjEgMjMuNSIvPjxwYXRoIGZpbGw9IiNGRkZGRkYiIGQ9Ik03Ni45IDMyLjdjOS44IDkuMyAxMC4yIDI1LTIuMiAzMi43LTEyLjUgNy43LTI5LjEtMi0zMi43LTE2LjItMy42LTE0LjIgNC41LTI2LjggMTcuNS0yOS4zIDkuMi0xLjggMTguMS4yIDI0LjMgNS41IDMuMSAyLjYgMy4yIDcuMy0xLjggNy4zeiIvPjxwYXRoIGZpbGw9IiMyNzI4MjIiIGQ9Ik0zNy44IDYxLjljMCAuOS0uNyAxLjctMS43IDEuNy0uOSAwLTEuNy0uNy0xLjctMS43IDAtLjkuNy0xLjcgMS43LTEuNy45IDAgMS43LjcgMS43IDEuN3ptMjQuOC0xNmMwIC45LS43IDEuNy0xLjcgMS43LS45IDAtMS43LS43LTEuNy0xLjcgMC0uOS43LTEuNyAxLjctMS43Ljl1IDAgMS43LjcgMS43IDEuN3oiLz48cGF0aCBkPSJNNTQuNiA2NC4zYy0uOSAwLTEuOC0uMi0yLjYtLjYtMS45LTEtMy0zLjEtMi42LTUuM2wxLjMtNy43YzEuOC0xMS4zIDEyLjEtMTQuOCAxOS4zLTkuNSAyLjQgMS44IDMuNyA0LjYgMy42IDcuNmwtLjQgOC4zYy0uMiAyLjgtMS42IDUuMi0zLjkgNi42LTQuNCAyLjctMTAuOC4yLTEzLjYtNC42bC0xLjItMS44IiBmaWxsPSIjMjcyODIyIi8+PC9zdmc+', names: ['Bear'] },
         { id: 'img-2d', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRThFQUVBIiBkPSJNNzIgMzcuN2MtMTEuMy0xMi44LTMxLjUtOC42LTM5LjktLjgtNC4yIDMuOS01LjQgOS43LTMuMiAxNC45IDQuNCAxMCAxMy45IDE2LjUgMjQuNSAxNi41IDEyLjggMCAyMi0xMC41IDIyLjUtMjMuMWwtMy45LTcuNXptLTYyLjEgMTEuN0MxLjYgMzguMSAxMy45IDIwLjEgMzMuMyAxMS43YzE5LjMtOC40IDQyLjkgMi4xIDUwLjYgMjIuOScyLjYgNDQuOS0xOC4xIDUyLjZTMTEuMyA2NS45IDkuOSA0OS40eiIvPjxwYXRoIGZpbGw9IiNGRkZGRkYiIGQ9Ik0zMy4xIDA0LjZjLTIuOSAxMS43IDYuOCAyMy4xIDE4LjUgMjZsOSA5LjggNy41IDE3LjYgMjEuMy00LjJDNzEuMyAyMy40IDUwLjggMTEuMSAzMy4xIDI0LjZ6Ii8+PHBhdGggZmlsbD0iI0ZGM0E5QSIgZD0iTTQ5LjUgNjFjLTIuMS0uOS0yLjItMy45LS4xLTYgMS4xLTEuMSAyLjgtMS41IDQuMy0xLjEgMS41LjQgMi42IDEuNiAyLjggMy4xIDEuNCAxMS4zIDkuNCAxMS42IDkuNCAxMS42Ii8+PHBhdGggZmlsbD0iIzI3MjgyMiIgZD0iTTQyLjMgNDYuN2MwIC45LS43IDEuNy0xLjcgMS43cy0xLjctLjctMS43LTEuNyAwLS45LjctMS43IDEuNy0uNyAxLjctMS43em0xNS41IDBjMCAuOS0uNyAxLjctMS43IDEuN3MtMS43LS43LTEuNy0xLjcgMC0uOS43LTEuNyAxLjctLjcgMS43LTEuN3oiLz48cGF0aAgb3BhY2l0eT0iLjciIGZpbGw9IiNGRjNBOWEiIGQ9Ik01My43IDU1LjljLTEuMi0xLjEtMy0xLjUtNC42LTEuMS0xLjYuNC0yLjcgMS43LTIuOSAzLjEtLjEgMS4xLjIgMi4yLjggMy4xLjcgbTEuNi03LjRjLTQuMyAxLjEtOC44IDUuMi05LjcgOS45Ii8+PHBhdGggZmlsbD0iI0ZGM0E5QSIgZD0iTTQ3LjMgNTUuOWMtMy4xIDEuNS02LjggNS40LTYuOCA1LjQiLz48L3N2Zz4=', names: ['Bunny', 'Rabbit'] },
       ],
@@ -40,7 +49,7 @@ const App: React.FC = () => {
       name: 'Colorful Animals',
       complexity: 2,
       images: [
-        { id: 'img-3a', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZBNjAwIiBkPSJNMzIgMjEuNmMxLjQtMTMuNiAxOC4xLTE2LjEgMjUuOS0xMy40IDIuOSAxIDYuMiAxLjMgOC40IDIuNyAxNC4yIDkuMiAxMS40IDM0LjMtNi41IDM4LTIwLjkgNC4yLTI2LjYtMTMtMjcuOC0yNy4zeiIvPjxwYXRoIGZpbGw9IiNGRkQ3MDAiIGQ9Ik00MC4xIDM4LjdjLTE1LjYgMy45LTE4LjIgMjYuOS00LjggMzYgMTEuMyA3LjcgMjguOSAyLjEgMzQuMy05LjJzMi0zMS4yLTE1LjUtMzUuMWMtNi40LTEuNS0xMy4zLS4xLTE0IDguMyIvPjxwYXRoIGZpbGw9IiMyNzI4MjIiIGQ9Ik00NyA1MWMwIC45LS43IDEuNy0xLjcgMS43cy0xLjctLjctMS43LTEuNyAwLS45LjctMS43IDEuNy0uNyAxLjctMS43em0xMCAwYzAgLjktLjcgMS43LTEuNyAxLjdzLTEuNy0uNy0xLjctMS43IDAtLjkuNy0xLjcgMS43LS43IDEuNy0xLjd6Ii8+PHBhdGggZmlsbD0iI0ZGQzEwNyIgZD0iTTMzLjggNzQuN2MtOS43IDEwLjEtNC40IDI0LjkgMTEuNyAyMy43IDE2LjItMS4yIDE3LjUtMTguOSAxNy41LTE4LjlsLTIuMS0yLjVjLTEuOS0yLjMtNS40LTIuMy03LjMgMGwtMS44IDEuOC0xLjggMS44LTEuOCAxLjhzLTMuOCAzLjgtNyA1Ii8+PHBhdGggZmlsbD0iI0M1NTMwMCIgZD0iTTUxLjMgNTkuNmMtMS40IDAtMi44LS41LTMuOC0xLjYtMS42LTEuNy0xLjYtNC41IDAtNi4yIDEuMS0xIDEuMy0yLjggMS4xLTQuNC0uMy0xLjUtMS4zLTIuOC0yLjYtMy40LTEuNy0uOC0zLjYtLjQtNSAxIC42LTEuNy4yLTMuNi0xLjEtNC45LTEuMy0xLjQtMy4xLTEuOS00LjktMS41LTQuMSAxLTUuNiA1LjUtMy42IDguOSAyLjIgMy45IDcuMyA0LjkgMTEuMSA0LjcgMS4xLS4xIDIuMi0uNCAzLjItLjggMS45LjcgMy4xIDEuOSA0IDMuNi45IDEuNyAxIDEuMy0uNSA0LjciLz48L3N2Zz4=', names: ['Lion'] },
+        { id: 'img-3a', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZBNjAwIiBkPSJNMzIgMjEuNmMxLjQtMTMuNiAxOC4xLTE2LjEgMjUuOS0xMy40IDIuOSAxIDYuMiAxLjMgOC40IDIuNyAxNC4yIDkuMiAxMS40IDM0LjMtNi41IDM4LTIwLjkgNC4yLTI2LjYtMTMtMjcuOC0yNy4zeiIvPjxwYXRoIGZpbGw9IiNGRkQ3MDAiIGQ9Ik00MC4xIDM4LjdjLTE1LjYgMy45LTE4LjIgMjYuOS00LjggMzYgMTEuMyA3LjcgMjguOSAyLjEgMzQuMy05LjJzMi0zMS4yLTE1LjUtMzUuMWMtNi40LTEuNS0xMy4zLS4xLTE0IDguMyIvPjxwYXRoIGZpbGw9IiMyNzI4MjIiIGQ9Ik00NyA1MWMwIC45LS43IDEuNy0xLjcgMS43cy0xLjctLjctMS43LTEuNyAwLS45LjctMS43IDEuNy0uNyAxLjctMS43em0xMCAwYzAgLjktLjcgMS43LTEuNyAxLjdzLTEuNy0uNy0xLjctMS43IDAtLjkuNy0xLjcgMS43LS4jIDEuNy0xLjd6Ii8+PHBhdGggZmlsbD0iI0ZGQzEwNyIgZD0iTTMzLjggNzQuN2MtOS43IDEwLjEtNC40IDI0LjkgMTEuNyAyMy43IDE2LjItMS4yIDE3LjUtMTguOSAxNy41LTE4LjlsLTIuMS0yLjVjLTEuOS0yLjMtNS40LTIuMy03LjMgMGwtMS44IDEuOC0xLjggMS44LTEuOCAxLjhzLTMuOCAzLjgtNyA1Ii8+PHBhdGggZmlsbD0iI0M1NTMwMCIgZD0iTTUxLjMgNTkuNmMtMS40IDAtMi44LS41LTMuOC0xLjYtMS42LTEuNy0xLjYtNC41IDAtNi4yIDEuMS0xIDEuMy0yLjggMS4xLTQuNC0uMy0xLjUtMS4zLTIuOC0yLjYtMy40LTEuNy0uOC0zLjYtLjQtNSAxIC42LTEuNy4yLTMuNi0xLjEtNC45LTEuMy0xLjQtMy4xLTEuOS00LjktMS41LTQuMSAxLTUuNiA1LjUtMy42IDguOSAyLjIgMy45IDcuMyA0LjkgMTEuMSA0LjcgMS4xLS4xIDIuMi0uNCAzLjItLjggMS45LjcgMy4xIDEuOSA0IDMuNi45IDEuNyAxIDEuMy0uNSA0LjciLz48L3N2Zz4=', names: ['Lion'] },
         { id: 'img-3b', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjOENDQzY0IiBkPSJNNTQuMiA3Mi42QzQwLjUgNzUuOCAyNiA3MC4xIDE5LjYgNTguMUMxMy4yIDQ2LjIgMTMuNSA0My42IDMwLjEgMjEuNCA0My4yIDMuMyA2My45IDEuOCA3Ny42IDEwLjggOTQuOSAyMS44IDg4LjUgNTMuMyA2OS44IDY0LjUgNjQuMyA2Ny45IDU5LjUgNzEuMiA1NC4yIDcyLjZ6Ii8+PHBhdGggZmlsbD0iI0ZGRkZGRiIgZD0iTTI3LjkgMzEuNGMtNy45IDYuNS05LjIgMjAuNS0zIDI5LjRzMTguNSA5LjYgMjYuMyAzLjEgOS4yLTIwLjUgMy0yOS40LTIwLjYtOS42LTI2LjMtMy4xem0zNS45LjkjLTcuOSA2LjUtOS4yIDIwLjUtMyAyOS40IDE2LjIgOS4xIDE4LjUgOS42IDI2LjMgMy4xIDkuMi0yMC41IDMtMjkuNC0xMC4zLTMuMXoiLz48cGF0aCBmaWxsPSIjMjcyODIyIiBkPSJNMzQuMiAzOC40Yy00LjYgMC04LjQgMy44LTguNCA4LjQgMCA0LjYgMy44IDguNCA4LjQgOC40IDQuNiAwIDguNC0zLjggOC40LTguNCAwLTQuNi0zLjgtOC40LTguNC04LjR6bTIzLjQgMGMtNC42IDAtOC40IDMuOC04LjQgOC40IDAgNC42IDMuOCA4LjQgOC40IDguNCA0LjYgMCA4LjQtMy44IDguNC04LjQgMC00LjYtMy44LTguNC04LjQtOC40eiIvPjxwYXRoIGZpbGw9IiNDNjAwMDAiIGQ9Ik01Ny4yIDYwLjljLTIuNy0xLjktNS45LTEuOS04LjYgMC0xLjQuOS0zLjEgMS45LTMuMSAzLjEgMCAyLjUgMy4zIDQuNiA3LjQgNC42czcuNC0yLjEgNy40LTQuNmMwLTEuMy0xLjYtMi4xLTMuMS0zLjF6Ii8+PC9zdmc+', names: ['Frog'] },
         { id: 'img-3c', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZENzAwIiBkPSJNNzIgNDIuM2MtMTAuOS0zLjQtMjMuNS0uOS0zMS4yIDcuMy03LjcgOC4yLTkuNiAyMC4xLTQuMyAyOS42IDUuMyA5LjYgMTUuOSAxNC45IDI3LjMgMTQuOSAxMy42IDAgMjUuNS03LjEgMzEtMTkuMyA0LjUtOS42IDQuNS0yMi45IDAtMzAuNmwtMjIuOC0xLjl6Ii8+PHBhdGggZmlsbD0iI0ZGQzEwNyIgZD0iTTU3LjIgNDQuOGMtMTEuMy42LTE5LjcgOS40LTE5LjcgMjAuNiAwIDEwLjEgNy41IDE4LjUgMTcuNSAxOS43IDEwLjEgMS4yIDE5LjQtNS44IDIxLjktMTUuNCAyLjItOS4xLTIuNy0xOC4zLTExLjktMjIuOS0yLjItMS4xLTQuOS0xLjktNy44LTIiLz48cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNNDEuMyA1OC44Yy0yLjQgMC00LjMgMS45LTQuMyA0LjNzMS45IDQuMyA0LjMgNC4zIDQuMy0xLjkgNC4zLTQuMy0xLjktNC4zLTQuMy00LjN6bTIzLjEgMGMtMi40IDAtNC4zIDEuOS00LjMgNC4zczEuOSA0LjMgNC4zIDQuMyA0LjMtMS45IDQuMy00LjMtMS45LTQuMy00LjMtNC4zeiIvPjxwYXRoIGZpbGw9IiNGRkE2MDAiIGQ9Ik0zMS4yIDU2LjhjLTUuNi0xLjEtMTAuNyAxLjgtMTIuNiA3LjEgLTEuOSA1LjMgLjIgMTEuMSA1LjggMTIuMiA1LjYgMS4xIDEwLjctMS44IDEyLjYtNy4xIDEuOS01LjMtLjItMTEuMS01LjgtMTIuMnptNDcuNCAxLjljLTUuNi0xLjEtMTAuNyAxLjgtMTIuNiA3LjEtMS45IDUuMy4yIDExLjEgNS44IDEyLjIgNS42IDEuMSAxMC43LTEuOCAxMi42LTcuMSAxLjgtNS4zLS4yLTExLjEtNS44LTEyLjJ6Ii8+PC9zdmc+', names: ['Duck'] },
         { id: 'img-3d', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZDRURFUSIgZD0iTTE2LjQgMzguNGMxLjEtMTUgMTQuNC0yNi4zIDI5LjQtMjUuMiAxMy40IDEgMjQuNiAxMS4zIDI1LjcgMjQuNyAxLjQgMTYuMi0xMC4yIDMwLjQtMjUuNyAzMC40LTE1LjYtLjEtMjcuMi0xNC40LTI1LjQtMzAuMnptNjguMy00LjJDNzEuMSAxMC4xIDQzLjMgMTEuNyAyOS4zIDI1LjEgMTIuMyAzNS42IDExIDYwLjYgMjMgNzQuOWMxMiAxNC4yIDM0LjEgMTQuMiA0Ni4xIDAgMTItMTQuMyAxMS4yLTM4LjQtMS41LTQwLjN6Ii8+PHBhdGggZmlsbD0iI0ZGMTA4QSIgZD0iTTU0LjIgNDQuOWMtNC43IDAtOC41IDQuMy04LjUgOS41czMuOCA5LjUgOC41IDkuNSA4LjUtNC4zIDguNS05LjUtMy44LTkuNS04LjUtOS41em0yNC41LTguOGMtNy40LTIuOS0xMy4zIDIuNC0xMy4zIDEwLjIgMCA1LjggNC40IDEwLjYgMTAuMSAxMi4xIDUuNyAxLjUgMTEuOS0yLjEgMTMuMy04LjhzLTIuNC0xMi4xLTcuMi0xMy4yIDAgMCAtMi45LS4zem0tNDkuMy4zYy03LjQgMi45LTEwLjMgMTEtNS4xIDE2LjhzMTQuMyA0LjUgMTguOC0yLjkgNS4xLTE2LjgtNS4xLTE2LjhjLTIuOS0xLjctOC41LTIuOS04LjYtMi45eiIvPjxwYXRoIGZpbGw9IiMyNzI4MjIiIGQ9Ik0zNy44IDU1LjljMCAxLjItLjkgMi4xLTIuMSAyLjFzLTIuMS0uOS0yLjEtMi4xIDAtMS4yLjktMi4xIDIuMS0uOSAyLjEuOXptMjcuMy0yLjFjMCAxLjItLjkgMi4xLTIuMSAyLjFzLTIuMS0uOS0yLjEtMi4xIDAtMS4yLjktMi4xIDIuMS0uOSAyLjEuOXoiLz48cGF0aCBmaWxsPSIjRkY4QUE4IiBkPSJNNTQuMiA1NC43Yy0yLjYgMC00LjcgMi40LTQuNyA1LjNzMi4xIDUuMyA0LjcgNS4zIDQuNy0yLjQgNC43LTUuMy0yLjEtNS4zLTQuNy01LjN6Ii8+PHBhdGggZmlsbD0iIzI3MjgyMiIgZD0iTTUyLjYgNTYuOWMwIC42LS41IDEuMS0xLjEgMS4xcy0xLjEtLjUtMS4xLTEuMSAwLS42LjUtMS4xIDEuMS0uNSAxLjEuNXptNS4yLS4yYzAgLjYtLjUgMS4xLTEuMSAxLjFzLTEuMS0uNS0xLjEtMS4xIDAtLjYuNS0xLjEgMS4xLS41IDEuMS41eiIvPjwvc3ZnPg==', names: ['Pig'] },
@@ -51,132 +60,148 @@ const App: React.FC = () => {
       name: 'Family Faces',
       complexity: 3,
       images: [
-        { id: 'img-4a', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZDRDE0IiBkPSJNNzkuMyA0My4xQzgzLjUgNTYuNSA3OS45IDc1LjkgNjUuMSA4My43IDUwLjMgOTEuNiAzMy4zIDg2LjcgMjUgNzIuOCAyMi43IDY5LjYgMjIuNSA1OS4yIDMwLjIgNDguOGMxLjQtMS45IDYtNy42IDYtNy42Ii8+PHBhdGggZmlsbD0iIzYxNDExRSIgZD0iTTczLjMgNDQuNGMtMi4yLTEzLjktMTIuOS0yNy4xLTI4LjQtMjUuMy0xMi40IDEuNS0yMy45IDEwLjQtMjcgMjIuNy0yLjIgOS40IDAgMjAuNCA4LjIgMjMuOCAxLjkuOCAyLjItLjQgMi45LTIuMyAxLjQtMy45IDQuNC0xMS45IDQuNC0xMS45cy0xLjkgNC43IDIgMTBjLjctLjggMS41LTEuNyAyLjItMi42IDYuMS04LjEgMTMuNC0xMy41IDI0LTEzLjQgMTEuNS0uMSAyMC41IDcgMjMgMTcuNnoiLz48cGF0aCBmaWxsPSIjMkQyNzI4IiBkPSJNNTAgNzkuNGMtNy41IDAtMTMuNi02LjEtMTMuNi0xMy42IDAtNi40IDQuNC0xMS44IDEwLjUtMTMuMiAxLjUtLjMgMS43IDIuMS4zIDJsLTEuNy4yYy0zLjgtLjItNi42IDIuNy02LjYgNi40IDAgNC4yIDMuNCA3LjYgNy42IDcuNiA3LjEgMCAxMS4xLTguMyA0LjgtMTEuNi0xLjYtLjgtMy4zLS4xLTMuMyAxLjcgMCAyLjggNS44IDMuNSA3LjkgMS4zIDEuNS0xLjUgMi4yLTUgMC02LjItMS44LTEuNC00LjMtMS40LTUuOS0uMy0uNi40LTEuMS45LTEuNSAxLjYtLjEuMy0uMy41LS41LjctMS42IDEuNi0yLjcgMy41LTIuNyA1LjYgMCAyLjMuOSA0LjUgMi4zIDYuMiAxLjUgMS44IDMuNSA3LjcgNy42IDcuNnoiLz48cGF0aCBmaWxsPSIjMjMxRjIwIiBkPSJNNjMuMyA1My44Yy0uMS0yLjQtMS41LTQuNS0zLjQtNS43LTIuNC0xLjUtNS4zLTEuNS03LjktLjEtMi42IDEuNC00LjIgNC00LjIgNi44IDAgMi4zLjkgNC40IDIuMyA2Yy44LjkgMS43IDEuNSAyLjggMS45IDEuMy41IDIuNi41IDMuOS0uMSAyLjgtMS4xIDQuOC0zLjcgNS4zLTYuNm0tMjguNS0xLjdjLS4xLTIuNC0xLjUtNC41LTMuNC01LjctMi40LTEuNS01LjMtMS41LTcuOS0uMS0yLjYgMS40LTQuMiA0LTQuMiA2LjggMCAyLjMuOSA0LjQgMi4zIDYuOC45IDEuNyAyLjUgMS45IDIuOCAxLjkgMS4zLjUgMi42LjUgMy45LS4xIDIuOC0xLjEgNC44LTMuNyA1LjMtNi42Ii8+PC9zdmc+', names: ['Mommy', 'Mom'] },
-        { id: 'img-4b', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZDRDE0IiBkPSJNNjkuOCA3Ny4zYzE1LjEtMTEuMiAxNi44LTM1LjEgMy43LTQ4LjgtMTMuMS0xMy43LTM5LjUtMTUuMS01Mi4zLTNsLTEuNyAyLjVjMS41IDMuNCAxLjUgMy40LTEuOCAxMC42LTEuNSAzLjMtMi4yIDUuOC0yLjIgOC40czEuMyA1EVENTQuNCA1Ny4xYzUuMi0yLjMgMTMtNC4yIDE5LTQuMiAxMy40IDAgMjEuOSAxMC44IDIwLjggMjQuMXoiLz48cGF0aCBmaWxsPSIjNjE0MTFFIiBkPSJNNjggMzcuNWMtMy4xLTktOC4yLTE2LjctMTUuMS0yMS40LTkuOS02LjgtMjEuMy03LjQtMzEuMi0xLjctOS44IDUuNy0xNi4xIDE2LjEtMTYuOSAyNy44LS4zIDMuNy0uMiA4LjQuMyAxMi4yIDEuNSAxMC4zIDUuOSAxOS45IDE1MS43IDguMiAyLjQuNCAyLjMtMy4xLS40LTMuN2wtMi4xLS40Yy00LjctLjktOS4zLTEuMy0xMy42LTEuM3M4LjYgNCAxMi45IDcuMmMyLjggMiAxLjggNS0xLjIgNS45LTEyLjkgMy44LTI3LjMtMy42LTI5LTE5eiIvPjxwYXRoIGZpbGw9IiMyMzFGMjAiIGQ9Ik0zMy4yIDU1LjljLS4zLTIuMS0yLjMtMy43LTQuMy0zLjgtMS4zIDAtMi41LjQtMy41IDEuMi0xLjcgMS40LTEuOCAzLjgtLjIgNS41IDEgMS4xIDIuNCAxLjYgMy44IDEuNCAyLjItLjMgMy44LTIuMyAzLjgtNC4zem0zMi4yLS41Yy0uMy0yLjEtMi4zLTMuNy00LjMtMy44LTEuMyAwLTIuNS40LTMuNSAxLjItMS43IDEuNC0xLjggMy44LS4yIDUuNSAxIDEuMSAyLjQgMS42IDMuOCAxLjQgMi4yLS4zIDMuOC0yLjMgMy44LTQuM3oiLz48cGF0aCBmaWxsPSIjMkQyNzI4IiBkPSJNNTQuMSA4MS4yYy0xMC4yIDAtMTguNS04LjMtMTguNS0xOC41IDAtOC4zIDUuNS0xNS4zIDEzLjEtMTcuNiAyLS42IDIuMyAyLjctLjQgMi45bC0xLjkuM2MtNC43LjItOC4zIDQuMS04LjMgOC43IDAgNS45IDQuOCA5LjcgMTAuNyA5LjcgNy4yIDAgMTEuMS04LjMgNC44LTExLjYtMS42LS44LTMuMy0uMS0zLjMgMS43IDAgMy44IDUuOSA0IDguMiAxLjUgMS41LTEuNiAyLjItNS4xIDAtNi40LTEuOC0xLjUtNC4zLTEuNS01LjktLjQtLjYuNC0xLjEuOS0xLjUgMS42LS4xLjMtLjIuNS0uNC44LTIuNCAyLjItMy44IDUuMy0zLjggOC4yIDAgMy40IDEuNCA2LjYgMy41IDguOSAyLjEgMi41IDQuOSA5LjcgMTAuNyA5LjciLz48L3N2Zz4=', names: ['Daddy', 'Dad'] },
-        { id: 'img-4c', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjOUE5OTlBIiBkPSJNNjkuMyAzMS43QzU5LjYgMTUuMyA0My45IDE4LjcgNDMuOSAxOC43cy0xLjItMjAuNy0xOC40LTEzLjRjLTEwLjcgNC41LTEyLjIgMjMuNC03LjkgMzIuNCAxLjcuMy45IDAgMS40LTFoMS4xYy0uMi0xLjgtLjQtMy43LS40LTUuNCAwLTQuOSAzLjEtOC44IDguMS04LjggNC45IDAgOC4xIDMuOSA4LjEgOC44IDAgMS44LS4zIDMuNi0uNCA1LjVoMS40YzEuNS0xLjIgMS45LTEuMiAyLjItMi4zIDIuNC04LjcgMTEuOC0xNi41IDIyLjEtMTQuNnoiLz48cGF0aCBmaWxsPSIjRjJFRTFFIiBkPSJNNjcuOSA4NC4yYzE1LjYtNy42IDE5LjUtMjkuMyA4LjgtNDQuOEM2NS45IDI0LjcgNDQuMyAxOS4zIDMwLjggMjYuOGMtMTMuNSA3LjUtMTguNSAyNi4xLTExLjkgNDEuNSA0LjQgMTAuMyAxMy41IDE3IDI0LjYgMTcgNy42IDAgMTQuNC0zLjEgMTktNi4xeiIvPjxwYXRoIGZpbGw9IiMyMzFGMjAiIGQ9Ik0zOC4yIDYxLjRjLS4yLTIuOS0yLjItNS4xLTQuNi01LjItMS41LS4xLTIuOS40LTMuOSAxLjQtMS45IDEuNi0yIDQuMy0uMyA2LjIgMS4xIDEuMyAyLjggMS44IDQuNCAxLjYgMi41LS4zIDQuNC0yLjYgNC40LTQuNnptMjEuMi0uOWMtLjItMi45LTIuMi01LjEtNC42LTUuMi0xLjUtLjEtMi45LjQtMy45IDEuNC0xLjkgMS42LTIgNC4zLS4zIDYuMiAxLjEgMS4zIDIuOCAxLjggNC40IDEuNiAyLjUtLjMgNC40LTIuNiA0LjQtNC42eiIvPjxwYXRoIGZpbGw9IiMyNzI4MjIiIGQ9Ik01NC42IDc0LjVjLTUuOSAwLTEwLjctNC44LTEwLjctMTAuNyAwLTUuMiAzLjUtOS42IDguMi0xMC41IDEuMi0uMiAxLjMgMS43LS4zIDEuOGwtMS4zLjJjLTIuOS4yLTUuMiAyLjYtNS4yIDUuMiAwIDMgMi40IDUuNCA1LjQgNS40IDUuNiAwIDguNy02LjUgMy44LTkgLTEuMi0uNi0yLjYtLjEtMi42IDEuMyAwIDIuMiA0LjYgMi44IDYuMiAxIDEuMS0xLjIgMS43LTMuOSAwLTQuOC0xLjQtMS4xLTMuNC0xLjEtNC42LS4yLS41LjMtLjkuNi0xLjIgMS4yLS4xLjItLjIuNC0uNC41LTEuMyAxLjItMi4xIDIuOC0yLjEgNC4zIDAgMS44LjcgMy41IDEuOCA1IDIgMi4yIDMuOSA2IDguMyA2eiIvPjxwYXRoIGZpbGw9IiM2QzZDNkMiIGQ9Ik0zNy40IDQ5LjZjLS45LjEtMS44LjMtMi42LjctMS40LjgtMi40IDIuMi0yLjQgMy45IDAgMi4zIDEuNiA0LjIgMy45IDQuNyAxLjIuMyAyLjQuMyAzLjYtLjEgMi4yLS44IDMuNy0yLjggMy45LTUuMS4zLTIuOC0xLjUtNS4yLTMuOS01LjgtLjcuMi0xLjQuMy0yLjEuNHptMjQuMS0uMmMtLjkuMS0xLjguMy0yLjYuNy0xLjQuOC0yLjQgMi4yLTIuNCAzLjkgMCAyLjMgMS42IDQuMiAzLjkgNC43IDEuMi4zIDIuNC4zIDMuNi0uMSAyLjItLjggMy43LTIuOCAzLjktNS4xLjMtMi44LTEuNS01LjEtMy45LTUuOC0uOC0uMS0xLjUtLjItMi4xLS4zIi8+PC9zdmc+', names: ['Grandma', 'Nana'] },
-        { id: 'img-4d', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRjJFRTFFIiBkPSJNNjcuOSA4NC4yYzE1LjYtNy42IDE5LjUtMjkuMyA4LjgtNDQuOEM2NS45IDI0LjcgNDQuMyAxOS4zIDMwLjggMjYuOGMtMTMuNSA3LjUtMTguNSAyNi4xLTExLjkgNDEuNSA0LjQgMTAuMyAxMy41IDE3IDI0LjYgMTcgNy42IDAgMTQuNC0zLjEgMTktNi4xeiIvPjxwYXRoIGZpbGw9IiMyMzFGMjAiIGQ9Ik0zOC4yIDYxLjRjLS4yLTIuOS0yLjItNS4xLTQuNi01LjItMS41LS4xLTIuOS40LTMuOSAxLjQtMS45IDEuNi0yIDQuMy0uMyA2LjIgMS4xIDEuMyAyLjggMS44IDQuNCAxLjYgMi41LS4zIDQuNC0yLjYgNC40LTQuNnptMjEuMi0uOWMtLjItMi45LTIuMi01LjEtNC42LTUuMi0xLjUtLjEtMi45LjQtMy45IDEuNC0xLjkgMS42LTIgNC4zLS4zIDYuMiAxLjEgMS4zIDIuOCAxLjggNC40IDEuNiAyLjUtLjMgNC40LTIuNiA0LjQtNC42eiIvPjxwYXRoIGZpbGw9IiMyNzI4MjIiIGQ9Ik01MS44IDg4LjljLTYuMSAwLTExLjEtNC45LTExLjEtMTEuMXMyLjQtMTMuNiA4LjYtMTMuNmM0LjQgMCA3LjkgMy4xIDkuMSA3LjIgMS40IDQuNS0xLjIgOS01LjggOS44LTEuMS4yLTEuOS0uMy0xLjktMS4xIDAtLjYtLjQtMS41LS4xLTEuOS41LS42IDEuNC0uMyAxLjkuMiAyLjEgMy4zLTYuMSAzLjEtNi45LS4xLS40LTEuNi44LTIuNyAyLjItMi43IDIuMSAwIDMuNCAxLjkgMi44IDQuMi0xLjEgNC4xLTguOSA0LjYtMTEuNS0uMS0uOS0xLjYtLjEtMy41IDEuNi0zLjUgMi4yIDAgMy40LjIgMy45IDEuNCAuMy44LS4xIDEuOC0uOSAyLjItNC42IDIuNC0yLjctOS40IDQtMTEuNnoiLz48cGF0aAgb3BhY2l0eT0iLjIiIGQ9Ik02MyAzNC40Yy0xLjIgMy4yLTYuMyA4LjQtMTEuNSA4LjEtNC41LS4yLTcuMy00LjUtNy43LTcuMi0uMy0yLjEgMS4zLTMuOSA0LjQtNC42IDEzLjQtMy4xIDIyLjcgMi4zIDE0LjggMy43eiIvPjxwYXRoIGZpbGw9IiM5QTk5OUEiIGQ9Ik0yOS40IDQyLjEgNDMuMyAzN2MtNS41LTEzLjctMjIuNi03LjMtMjIuNi03LjNzNi4zIDE5LjggOC43IDEyLjR6bTUwLjYtMTEuNEM3MyAzNyA1OS4xIDQyLjEgNTkuMSA0Mi4xUzU1IDIxLjggNzggMjEuM2MyLjktOS42LTEzLjMtNS4xLTcuOS04LjgiLz48cGF0aCBmaWxsPSIjMkQyNzI4IiBkPSJNNjIgODAuNGMtMy41IDAtNi40LTIuOS02LjQtNi40IDAtMi44IDIuOC01LjYgNC4xLTUuNm0tMTYuMyAyLjJjLTMuNSAwLTYuNC0yLjgtNi40LTYuNCAwLTIuOCAyLjgtNS42IDQuMS01LjYiLz48cGF0aCBmaWxsPSIjNkM2QzZDIiBkPSJNNTQuNiA4NC4zYy0xLjEgMC0yLjEtLjItMy0uNi0xLjgtLjgtMi45LTIuNS0yLjktNC41di0xLjVjLjctNC4yIDYuOS0yLjQgOC43IDIgLjkgMi4yLS41IDQuNS0yLjcgNS4xLS43LjItMS40LjUtMy4xLjV6Ii8+PC9zdmc+', names: ['Grandpa'] },
-      ],
+        { id: 'img-4a', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZDRURBIiBkPSJNNzcuNCA0My4yYzMuMy0xMS42LTUuMy0yMy40LTE3LTI2LjctMTEuNi0zLjQtMjQuMiA0LjQtMjYuNyAxN0M MjEuMyA0Mi44IDM2LjkgNTMuMyA0OC40IDUzLjNjMTEuNiAwIDIyLjEtNy45IDI5LTEwLjF6Ii8+PHBhdGggZmlsbD0iIzY2MzkxRSIgZD0iTTU1LjEgMTljLTEzLjMgNC0yMC4xIDE4LjktMTUuMSAzMi44IDQuMyAxMS45IDE2LjYgMTkuMiAyOC41IDE0LjkgMTIuOC00LjYgMTkuMi0xOC44IDE0LjktMzIuOC00LTExLjYtMTQtMTguOC0yMy4zLTE0LjloLTQuMXoiLz48cGF0aCBmaWxsPSIjMjcyODIyIiBkPSJNNjIgMzcuNGMwIDEuMi0xIDIuMS0yLjEgMi4xL TEuMiAwLTIuMS0xLTIuMS0yLjEgMC0xLjIgMS0yLjEgMi4xLTIuMSAxLjIgMCAyLjEgMSAyLjEgMi4xem0tMjAuMyAyLjFjMCAxLjItMSAyLjEtMi4xIDIuMS0xLjIgMC0yLjEtMS0yLjEtMi4xIDAtMS4yIDEtMi4xIDIuMS0yLjEgMS4yIDAgMi4xIDEgMi4xIDIuMXoiLz48cGF0aCBmaWxsPSIjRkY4QUE4IiBkPSJNNTcuNiA0OS4yYy01LjUgMC0xMCA0LjItMTAgOS4zIDAgMy4yIDEuOCA2IDIuOSA3LjYgMS44IDIuNiA0LjggNC4zIDcuMSA0LjNzNS4zLTEuNyA3LjEtNC4zYzEuMS0xLjYgMi45LTQuNCAyLjktNy42IDAtNS4xLTQuNS05LjItMTAtOS4yIi8+PC9zdmc+', names: ['Mama', 'Mom'] },
+        { id: 'img-4b', url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjRkZDRURBIiBkPSJNNzcuNCA0My4yYzMuMy0xMS42LTUuMy0yMy40LTE3LTI2LjctMTEuNi0zLjQtMjQuMiA0LjQtMjYuNyAxN0M MjEuMyA0Mi44IDM2LjkgNTMuMyA0OC40IDUzLjNjMTEuNiAwIDIyLjEtNy45IDI5LTEwLjF6Ii8+PHBhdGggZmlsbD0iIzE1NDk5QiIgZD0iTTU3LjMgMjIuM2MtMTEuMy0xLjEtMjEuOSAxLjctMjggOC43LTcuOCA4LjEtOC44IDIyLjEtMi4xIDMxLjggNi43IDkuNyAxOS4yIDEzLjQgMzAuNSAxMi4zIDEyLjktMS4zIDIyLjEtMTEuNSAyMC44LTI0LjRzLTExLjUtMjIuMS0yMS4yLTI4LjR6Ii8+PHBhdGggZmlsbD0iIzI3MjgyMiIgZD0iTTM5LjYgNDAuNGMwIDEuMi0xIDIuMS0yLjEgMi4xcy0yLjEtLjktMi4xLTIuMSAwLTEuMiAxLTIuMSAyLjEtLjkgMi4xLjl6bTIyLjktMi4xYzAgMS4yLTEgMi4xLTIuMSAyLjFzLTIuMS0uOS0yLjEtMi4xIDAtMS4yIDEuMi0yLjEgMi4xLS45IDIuMS45eiIvPjxwYXRoIGZpbGw9IiNGRjdDMDAiIGQ9Ik00Ny45IDQ4Yy0uNy0uOS0xLjktMS40LTMtMS40cy0yLjMuNS0zIDEuNGMtMS44IDIuMy01LjMgMy04LjIgMi4xLTEwLjUtMy4yLTEyLjIgMTEuMy0yLjggMTUuMyA1LjggMi41IDEzLjggMCAxNi43LTYuNy44LTEuOCAxLjUtMy42IDEuNC01LjYgMC0zLjEtMi45LTUuNy02LjMtNS43aC0xLjciLz48L3N2Zz4=', names: ['Papa', 'Dad'] },
+      ]
     },
   ], []);
-  
-  const [collections, setCollections] = useState<ImageCollection[]>([]);
 
-  // Load collections from localStorage on initial render
-  useEffect(() => {
+  const [collections, setCollections] = useState<ImageCollection[]>(() => {
     try {
-      const storedCollections = localStorage.getItem('cogniplay-collections');
-      if (storedCollections) {
-        setCollections(JSON.parse(storedCollections));
-      } else {
-        setCollections(mockCollections); // Fallback to mocks if nothing is stored
-      }
-    } catch (error) {
-      console.error("Failed to load collections from localStorage", error);
-      setCollections(mockCollections);
+      const savedCollections = localStorage.getItem('cogniplay-collections');
+      return savedCollections ? JSON.parse(savedCollections) : mockCollections;
+    } catch (e) {
+      console.error("Could not read collections from localStorage", e);
+      return mockCollections;
     }
-  }, [mockCollections]);
+  });
 
-  // Save collections to localStorage whenever they change
   useEffect(() => {
     try {
-      if (collections.length > 0) {
-        localStorage.setItem('cogniplay-collections', JSON.stringify(collections));
-      }
-    } catch (error) {
-      console.error("Failed to save collections to localStorage", error);
+      localStorage.setItem('cogniplay-collections', JSON.stringify(collections));
+    } catch (e) {
+      console.error("Could not save collections to localStorage", e);
     }
   }, [collections]);
 
+  useEffect(() => {
+    const loadVoices = () => {
+        const allVoices = window.speechSynthesis.getVoices();
+        const englishVoices = allVoices.filter(voice => voice.lang.startsWith('en-'));
+        setAvailableVoices(englishVoices);
+
+        if (!localStorage.getItem('cogniplay-voice') && englishVoices.length > 0) {
+            let defaultVoice: SpeechSynthesisVoice | undefined;
+            const preferredVoices = [
+                (v: SpeechSynthesisVoice) => v.name === 'Google UK English Female',
+                (v: SpeechSynthesisVoice) => v.name === 'Samantha',
+                (v: SpeechSynthesisVoice) => v.lang === 'en-US' && v.name.includes('Google'),
+                (v: SpeechSynthesisVoice) => v.lang.startsWith('en-') && v.localService,
+            ];
+
+             for (const condition of preferredVoices) {
+                const foundVoice = englishVoices.find(condition);
+                if (foundVoice) {
+                    defaultVoice = foundVoice;
+                    break;
+                }
+            }
+            if (!defaultVoice) {
+                defaultVoice = englishVoices[0];
+            }
+            
+            if (defaultVoice) {
+                const voiceName = defaultVoice.name;
+                setSelectedVoiceName(voiceName);
+                localStorage.setItem('cogniplay-voice', voiceName);
+            }
+        }
+    };
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
+
+  const handleVoiceChange = (voiceName: string) => {
+    setSelectedVoiceName(voiceName);
+    try {
+        localStorage.setItem('cogniplay-voice', voiceName);
+    } catch (e) {
+        console.error("Could not save voice to localStorage", e);
+    }
+  };
 
   const handleStartGame = (collection: ImageCollection) => {
-    if (collection.images.length < 2) {
-      alert("Please add at least two images to a collection to start a game.");
-      return;
-    }
     setSelectedCollection(collection);
     setGameStatus(GameStatus.LOADING);
   };
 
   const handleEndGame = () => {
-    setSelectedCollection(null);
     setGameStatus(GameStatus.IDLE);
+    setSelectedCollection(null);
   };
 
-  const handleOpenForm = (collection: ImageCollection | null) => {
+  const handleSaveCollection = (collectionData: Omit<ImageCollection, 'id'> & { id?: string }) => {
+    if (collectionData.id) {
+      setCollections(collections.map(c => c.id === collectionData.id ? { ...c, ...collectionData } as ImageCollection : c));
+    } else {
+      const newCollection = { ...collectionData, id: `collection-${Date.now()}` } as ImageCollection;
+      setCollections([...collections, newCollection]);
+    }
+    setIsFormOpen(false);
+  };
+
+  const handleDeleteCollection = (id: string) => {
+    if (window.confirm("Are you sure you want to delete this collection?")) {
+        setCollections(collections.filter(c => c.id !== id));
+    }
+  };
+
+  const handleEditCollection = (collection: ImageCollection | null) => {
     setEditingCollection(collection);
     setIsFormOpen(true);
   };
 
-  const handleCloseForm = () => {
-    setEditingCollection(null);
-    setIsFormOpen(false);
-  };
-
-  const handleSaveCollection = (collectionToSave: Omit<ImageCollection, 'id'> & { id?: string }) => {
-    if (collectionToSave.id) {
-      // Editing an existing collection
-      setCollections(collections.map(c => c.id === collectionToSave.id ? { ...c, ...collectionToSave } as ImageCollection : c));
-    } else {
-      // Creating a new collection
-      const newCollection: ImageCollection = {
-        ...collectionToSave,
-        id: `collection-${Date.now()}-${Math.random()}`,
-      };
-      setCollections(prev => [...prev, newCollection]);
-    }
-    handleCloseForm();
-  };
-  
-  const handleDeleteCollection = (collectionId: string) => {
-    if (window.confirm('Are you sure you want to delete this collection? This cannot be undone.')) {
-      setCollections(collections.filter(c => c.id !== collectionId));
-    }
-  };
-
-  const renderContent = () => {
-    if (gameStatus !== GameStatus.IDLE && selectedCollection) {
-      return (
-        <GameScreen
-          collection={selectedCollection}
-          onEndGame={handleEndGame}
-          gameStatus={gameStatus}
-          setGameStatus={setGameStatus}
-        />
-      );
-    } else {
-      return (
-        <ParentDashboard
-          collections={collections}
-          onStartGame={handleStartGame}
-          onNewCollection={() => handleOpenForm(null)}
-          onEditCollection={(collection) => handleOpenForm(collection)}
-          onDeleteCollection={handleDeleteCollection}
-        />
-      );
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-blue-50 font-sans">
-      <header className="bg-white shadow-sm">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-xl">
-              C
-            </div>
-            <h1 className="text-2xl font-bold text-gray-800">CogniPlay AI</h1>
-          </div>
-        </div>
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+      <header className="text-center mb-8">
+        <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-800 tracking-tight">
+            Cogni<span className="text-blue-500">Play</span> AI
+        </h1>
+        <p className="mt-2 text-lg text-gray-500">A fun learning adventure for your little one</p>
       </header>
-      <main className="container mx-auto p-4 sm:p-6">
-        {renderContent()}
+      <main>
+        {gameStatus === GameStatus.IDLE || gameStatus === GameStatus.FINISHED ? (
+          <ParentDashboard
+            collections={collections}
+            onStartGame={handleStartGame}
+            onNewCollection={() => handleEditCollection(null)}
+            onEditCollection={handleEditCollection}
+            onDeleteCollection={handleDeleteCollection}
+            availableVoices={availableVoices}
+            selectedVoiceName={selectedVoiceName}
+            onVoiceChange={handleVoiceChange}
+          />
+        ) : (
+          <GameScreen
+            collection={selectedCollection!}
+            onEndGame={handleEndGame}
+            gameStatus={gameStatus}
+            setGameStatus={setGameStatus}
+            selectedVoiceName={selectedVoiceName}
+          />
+        )}
+        {isFormOpen && (
+          <CollectionForm
+            isOpen={isFormOpen}
+            onClose={() => setIsFormOpen(false)}
+            onSave={handleSaveCollection}
+            collection={editingCollection}
+          />
+        )}
       </main>
-      <CollectionForm
-        isOpen={isFormOpen}
-        onClose={handleCloseForm}
-        onSave={handleSaveCollection}
-        collection={editingCollection}
-      />
     </div>
   );
 };

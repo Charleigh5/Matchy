@@ -9,6 +9,9 @@ interface ParentDashboardProps {
   onNewCollection: () => void;
   onEditCollection: (collection: ImageCollection) => void;
   onDeleteCollection: (id: string) => void;
+  availableVoices: SpeechSynthesisVoice[];
+  selectedVoiceName: string | null;
+  onVoiceChange: (voiceName: string) => void;
 }
 
 const ComplexityRating: React.FC<{ level: number }> = ({ level }) => (
@@ -19,7 +22,20 @@ const ComplexityRating: React.FC<{ level: number }> = ({ level }) => (
   </div>
 );
 
-export const ParentDashboard: React.FC<ParentDashboardProps> = ({ collections, onStartGame, onNewCollection, onEditCollection, onDeleteCollection }) => {
+export const ParentDashboard: React.FC<ParentDashboardProps> = ({ collections, onStartGame, onNewCollection, onEditCollection, onDeleteCollection, availableVoices, selectedVoiceName, onVoiceChange }) => {
+  
+  const handleTestVoice = () => {
+    if (!selectedVoiceName || window.speechSynthesis.speaking) return;
+    const utterance = new SpeechSynthesisUtterance("Hi! This is the voice I will use to play the game.");
+    const voice = availableVoices.find(v => v.name === selectedVoiceName);
+    if (voice) {
+      utterance.voice = voice;
+    }
+    utterance.pitch = 1.2;
+    utterance.rate = 0.9;
+    window.speechSynthesis.speak(utterance);
+  };
+  
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -31,6 +47,41 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ collections, o
             <PlusIcon className="w-5 h-5 mr-2" />
             New Collection
         </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-lg p-5">
+        <h3 className="text-xl font-semibold text-gray-700 mb-4">Game Settings</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+          <label htmlFor="voice-select" className="text-gray-600 font-medium mb-2 sm:mb-0">AI Voice:</label>
+          <div className="flex items-center space-x-2">
+            <select
+              id="voice-select"
+              value={selectedVoiceName || ''}
+              onChange={(e) => onVoiceChange(e.target.value)}
+              className="block w-full max-w-xs px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              aria-label="Select AI Voice"
+              disabled={availableVoices.length === 0}
+            >
+              {availableVoices.length > 0 ? (
+                availableVoices.map(voice => (
+                  <option key={voice.name} value={voice.name}>
+                    {`${voice.name} (${voice.lang})`}
+                  </option>
+                ))
+              ) : (
+                <option>Loading voices...</option>
+              )}
+            </select>
+            <button 
+              onClick={handleTestVoice} 
+              className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition disabled:opacity-50"
+              aria-label="Test selected voice"
+              disabled={!selectedVoiceName}
+            >
+              <PlayIcon className="w-5 h-5 text-gray-600"/>
+            </button>
+          </div>
+        </div>
       </div>
       
       {collections.length === 0 && (

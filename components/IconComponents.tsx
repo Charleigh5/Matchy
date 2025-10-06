@@ -19,7 +19,7 @@ export const MicrophoneIcon: React.FC<{ className?: string, isOn?: boolean }> = 
     <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
     <line x1="12" y1="19" x2="12" y2="23"></line>
     <line x1="8" y1="23" x2="16" y2="23"></line>
-    {isOn && <circle cx="12" cy="12" r="14" fill="currentColor" className="opacity-20" />}
+    {isOn && <circle cx="12" cy="12" r="14" fill="currentColor" className="opacity-25 animate-pulse" />}
   </svg>
 );
 
