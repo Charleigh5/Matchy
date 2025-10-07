@@ -21,7 +21,10 @@ function createBlob(data: Float32Array): Blob {
     const l = data.length;
     const int16 = new Int16Array(l);
     for (let i = 0; i < l; i++) {
-        int16[i] = data[i] < 0 ? data[i] * 32768 : data[i] * 32767;
+        // Clamp the float32 sample to the [-1, 1] range
+        const s = Math.max(-1, Math.min(1, data[i]));
+        // Convert to 16-bit integer, using the full range for better quality
+        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
     return {
         data: encode(new Uint8Array(int16.buffer)),
@@ -46,6 +49,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
   const [isProcessing, setIsProcessing] = useState(false);
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'error' | 'closed' | 'permission_denied'>('connecting');
   const [activeVoice, setActiveVoice] = useState<SpeechSynthesisVoice | null>(null);
+
+  // --- Refs to fix stale closures in callbacks ---
+  const correctAnswerRef = useRef(correctAnswer);
+  useEffect(() => { correctAnswerRef.current = correctAnswer; }, [correctAnswer]);
+
+  const isProcessingRef = useRef(isProcessing);
+  useEffect(() => { isProcessingRef.current = isProcessing; }, [isProcessing]);
 
   const sessionPromiseRef = useRef<Promise<LiveSession> | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -147,11 +157,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
   }, [collection.images, collection.complexity, onEndGame, speak]);
 
   const processUserAnswer = useCallback((transcript: string) => {
-    if (!correctAnswer || isProcessing) return;
+    if (!correctAnswerRef.current || isProcessingRef.current) return;
 
     setIsProcessing(true);
 
-    const isCorrect = correctAnswer.names.some(name =>
+    const isCorrect = correctAnswerRef.current.names.some(name =>
       transcript.toLowerCase().includes(name.toLowerCase())
     );
 
@@ -167,13 +177,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
           setFeedback(null);
           setIsProcessing(false);
           // Re-ask the question
-          if (correctAnswer) {
-            speak(`Can you find the ${correctAnswer.names[0]}?`);
+          if (correctAnswerRef.current) {
+            speak(`Can you find the ${correctAnswerRef.current.names[0]}?`);
           }
         }, 1500);
       });
     }
-  }, [correctAnswer, isProcessing, speak, startNewRound]);
+  }, [speak, startNewRound]);
 
 
   const setupGeminiLive = useCallback(async () => {
@@ -313,22 +323,56 @@ export const GameScreen: React.FC<GameScreenProps> = ({ collection, onEndGame, g
   }
   
   return (
-    <div className="flex flex-col h-screen bg-gray-100 font-sans p-4 sm:p-6 lg:p-8">
+    <div className="flex flex-col h-screen bg-blue-50 font-sans p-4 sm:p-6" role="main" aria-label="Game Screen">
       <header className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-gray-700">{collection.name}</h2>
-        <button
-          onClick={onEndGame}
-          className="flex items-center justify-center px-4 py-2 bg-red-500 text-white rounded-lg shadow hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-        >
-          <StopIcon className="w-5 h-5 mr-2" />
-          End Game
-        </button>
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-700 sr-only">
+          Current task: Find the {correctAnswer?.names[0]}
+        </h2>
+        <div className="w-full flex justify-end">
+            <button 
+              onClick={onEndGame} 
+              className="flex items-center px-4 py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105"
+              aria-label="End Game"
+            >
+              <StopIcon className="w-5 h-5 mr-2" />
+              End Game
+            </button>
+        </div>
       </header>
 
       <main className="flex-grow flex items-center justify-center">
-        <div className={`grid gap-4 sm:gap-6 md:gap-8 w-full max-w-4xl grid-cols-2`}>
-           {roundOptions.map(image => (
-            <ImageCard
-              key={image.id}
-              imageUrl={image.url}
-              
+        <div 
+            className={`grid gap-4 sm:gap-6 md:gap-8 w-full max-w-4xl ${
+                roundOptions.length <= 2 ? 'grid-cols-2' :
+                roundOptions.length === 3 ? 'grid-cols-1 sm:grid-cols-3' :
+                'grid-cols-2'
+            } items-center justify-center`}
+            role="grid"
+            aria-label="Image choices"
+        >
+          {roundOptions.map(option => (
+            <div key={option.id} role="gridcell">
+                <ImageCard
+                    imageUrl={option.url}
+                    altText={option.names[0]}
+                    onClick={() => { /* Voice is the primary input */ }}
+                    isWinner={feedback === 'correct' && option.id === correctAnswer?.id}
+                    isLoser={feedback === 'correct' && option.id !== correctAnswer?.id}
+                    isDisabled={isProcessing || feedback !== null}
+                />
+            </div>
+          ))}
+        </div>
+      </main>
+
+      <footer className="flex items-center justify-center p-4 mt-4" aria-live="polite">
+        <div className="flex items-center space-x-3 bg-white px-6 py-3 rounded-full shadow-md">
+          <MicrophoneIcon className={`w-6 h-6 ${isProcessing ? 'text-gray-400' : 'text-blue-500'}`} isOn={!isProcessing && feedback === null} />
+          <p className="text-lg text-gray-600 font-medium">
+            {isProcessing ? "Thinking..." : feedback === 'correct' ? "Great job!" : feedback === 'incorrect' ? "Oops, try again!" : "Listening..."}
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+};
